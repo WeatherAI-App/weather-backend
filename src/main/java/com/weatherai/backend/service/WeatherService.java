@@ -106,17 +106,29 @@ public class WeatherService {
         List<Double> wind = (List<Double>) hourly.get("wind_speed_10m");
         List<Integer> codes = (List<Integer>) hourly.get("weather_code");
 
-        // Only next 24 hours
-        int limit = Math.min(24, times.size());
-        for (int i = 0; i < limit; i++) {
-            HourlyForecast h = new HourlyForecast();
-            h.setTime(formatTime(times.get(i)));
-            h.setTemp(temps.get(i));
-            h.setHumidity(humidity.get(i));
-            h.setRainProbability(rain.get(i));
-            h.setWindSpeed(wind.get(i));
-            h.setCondition(getCondition(codes.get(i)));
-            result.add(h);
+        // Get current hour to filter past hours
+        int currentHour = java.time.LocalTime.now().getHour();
+
+        int count = 0;
+        for (int i = 0; i < times.size() && count < 24; i++) {
+            String timeStr = times.get(i);
+            // Extract hour from "2026-06-22T19:00"
+            int hour = Integer.parseInt(timeStr.substring(11, 13));
+
+            // Only include current hour onwards
+            if (i == 0 || hour >= currentHour || count > 0) {
+                if (count == 0 && hour < currentHour) continue;
+
+                HourlyForecast h = new HourlyForecast();
+                h.setTime(timeStr.substring(11, 16)); // "19:00"
+                h.setTemp(toDouble(temps.get(i)));
+                h.setHumidity(humidity.get(i));
+                h.setRainProbability(rain.get(i));
+                h.setWindSpeed(toDouble(wind.get(i)));
+                h.setCondition(getCondition(codes.get(i)));
+                result.add(h);
+                count++;
+            }
         }
 
         return result;
