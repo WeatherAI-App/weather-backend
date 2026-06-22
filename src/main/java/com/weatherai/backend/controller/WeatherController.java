@@ -21,4 +21,12 @@ public class WeatherController {
         WeatherResponse response = weatherService.getWeatherWithSuggestions(lat, lon);
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<WeatherResponse> getWeatherByCity(
+            @RequestParam String city
+    ) {
+        WeatherResponse response = weatherService.getWeatherByCity(city);
+        return ResponseEntity.ok(response);
+    }
 }

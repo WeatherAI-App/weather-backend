@@ -12,6 +12,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+
 @Service
 public class WeatherService {
 
@@ -213,6 +218,36 @@ public class WeatherService {
             }
         }
         return "Early morning before 7am or after sunset";
+    }
+
+    // ── Weather by City ────────────────────────────────────────────
+    public WeatherResponse getWeatherByCity(String city) {
+        // 1. Convert city name to lat/lon using Nominatim
+        String geocodeUrl = String.format(
+                "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1",
+                city.replace(" ", "+")
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("User-Agent", "WeatherAI-App/1.0");
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        ResponseEntity<List> response = restTemplate.exchange(
+                geocodeUrl, HttpMethod.GET, request, List.class
+        );
+
+        List<Map<String, Object>> results = response.getBody();
+
+        if (results == null || results.isEmpty()) {
+            throw new RuntimeException("City not found: " + city);
+        }
+
+        Map<String, Object> result = results.get(0);
+        double lat = Double.parseDouble((String) result.get("lat"));
+        double lon = Double.parseDouble((String) result.get("lon"));
+
+        // 2. Use existing method with the coordinates
+        return getWeatherWithSuggestions(lat, lon);
     }
 
     // ── Helpers ──────────────────────────────────────────────────
