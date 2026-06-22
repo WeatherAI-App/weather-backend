@@ -42,9 +42,6 @@ public class AIService {
             suggestion.append("💨 Strong winds today — be careful outdoors. ");
         }
 
-        // Air quality hint
-        suggestion.append("🌅 Best time to go outside: " + data.getBestTimeOutside() + ".");
-
         return suggestion.toString();
     }
 }
