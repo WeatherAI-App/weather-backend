@@ -61,7 +61,7 @@ public class WeatherService {
         // 5. AI suggestion
         String suggestion = aiService.getSuggestion(current);
 
-        return new WeatherResponse(location, current, hourly, daily, airQuality, suggestion);
+        return new WeatherResponse(location, current, hourly, daily, airQuality, suggestion, lat, lon);
     }
 
     // ── Current Weather ──────────────────────────────────────────

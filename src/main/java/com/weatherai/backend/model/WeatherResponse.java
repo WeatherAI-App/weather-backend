@@ -13,4 +13,6 @@ public class WeatherResponse {
     private List<DailyForecast> daily;
     private AirQuality airQuality;
     private String aiSuggestion;
+    private double lat;
+    private double lon;
 }

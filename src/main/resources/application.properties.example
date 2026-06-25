@@ -1,8 +1,21 @@
 # Server
 server.port=8080
-
-# App name
 spring.application.name=weather-backend
 
-# AI Key
-gemini.api.key=your_gemini_api_key_here
+# Database
+spring.datasource.url=jdbc:postgresql://db.dylkqrabvbgshmgxnsod.supabase.co:5432/postgres
+spring.datasource.username=postgres
+spring.datasource.password=Nangamxadan
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# Gemini key
+gemini.api.key=your_gemini_key_here
+
+# JWT
+jwt.secret=weatherai_jwt_secret_key_2026_secure_random_string
+jwt.expiration=86400000
