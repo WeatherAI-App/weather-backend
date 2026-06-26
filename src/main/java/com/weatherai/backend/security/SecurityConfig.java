@@ -45,6 +45,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173",
+                "https://weather-frontend-eight-gamma.vercel.app/",
                 "https://weather-frontend-gbc3kyv0e-ace-of-heart.vercel.app/"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
