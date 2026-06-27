@@ -15,12 +15,11 @@ public class LocationService {
     public LocationData getLocation(double lat, double lon) {
         String url = String.format(
                 "https://nominatim.openstreetmap.org/reverse" +
-                        "?lat=%s&lon=%s&format=json",
+                        "?lat=%s&lon=%s&format=json&accept-language=en",
                 lat, lon
         );
 
         HttpHeaders headers = new HttpHeaders();
-        // Required by Nominatim - identify your app
         headers.set("User-Agent", "WeatherAI-App/1.0");
 
         HttpEntity<Void> request = new HttpEntity<>(headers);

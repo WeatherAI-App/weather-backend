@@ -8,9 +8,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -29,9 +27,20 @@ public class WeatherService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public WeatherResponse getWeatherWithSuggestions(double lat, double lon) {
+        return getWeatherWithSuggestions(lat, lon, null);
+    }
 
-        // 1. Get location
+    public WeatherResponse getWeatherWithSuggestions(double lat, double lon, String cityNameOverride) {
+
+        // 1. Get location via reverse geocode
         LocationData location = locationService.getLocation(lat, lon);
+
+        // Override city name when the caller already knows the correct display name
+        // (e.g. "Tokyo"). Reverse geocoding often returns a sub-district instead
+        // (e.g. "Chiyoda") for cities whose admin boundary spans many wards.
+        if (cityNameOverride != null && !cityNameOverride.isBlank()) {
+            location.setCity(cityNameOverride);
+        }
 
         // 2. Fetch weather from Open-Meteo
         String url = String.format(
@@ -260,8 +269,9 @@ public class WeatherService {
         double lat = Double.parseDouble((String) result.get("lat"));
         double lon = Double.parseDouble((String) result.get("lon"));
 
-        // 2. Use existing method with the coordinates
-        return getWeatherWithSuggestions(lat, lon);
+        // 2. Fetch weather, passing the original search term as the city name
+        // so reverse-geocoding can't replace it with a sub-district name.
+        return getWeatherWithSuggestions(lat, lon, city);
     }
 
     // ── Helpers ──────────────────────────────────────────────────
@@ -303,5 +313,98 @@ public class WeatherService {
     private int toInt(Object val) {
         if (val == null) return 0;
         return ((Number) val).intValue();
+    }
+
+    public List<Map<String, Object>> autocompleteCity(String city) {
+        try {
+            String geocodeUrl = String.format(
+                    "https://nominatim.openstreetmap.org/search" +
+                            "?city=%s" +
+                            "&format=json" +
+                            "&limit=10" +
+                            "&addressdetails=1" +
+                            "&accept-language=en",
+                    city.replace(" ", "+")
+            );
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "WeatherAI-App/1.0");
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+
+            ResponseEntity<List> response = restTemplate.exchange(
+                    geocodeUrl, HttpMethod.GET, request, List.class
+            );
+
+            List<Map<String, Object>> nominatimResults = response.getBody();
+            List<Map<String, Object>> results = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+
+            if (nominatimResults != null) {
+                for (Map<String, Object> item : nominatimResults) {
+                    Map<String, Object> address =
+                            (Map<String, Object>) item.get("address");
+
+                    String type = item.getOrDefault("type", "").toString();
+                    String classType = item.getOrDefault("class", "").toString();
+
+                    // Allow place types AND administrative boundaries
+                    boolean isPlace = classType.equals("place");
+                    boolean isAdmin = classType.equals("boundary")
+                            && type.equals("administrative");
+                    if (!isPlace && !isAdmin) continue;
+
+                    // Allow city, town, village, suburb AND admin_level cities
+                    boolean validType = type.equals("city")
+                            || type.equals("town")
+                            || type.equals("village")
+                            || type.equals("administrative");
+                    if (!validType) continue;
+
+                    String cityName = getEnglishCityName(address, item);
+                    String country = address.getOrDefault("country", "").toString();
+
+                    if (cityName.isEmpty()) continue;
+                    if (country.isEmpty()) continue;
+
+                    // Deduplicate same city+country combinations
+                    String key = cityName.toLowerCase() + country.toLowerCase();
+                    if (seen.contains(key)) continue;
+                    seen.add(key);
+
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("city", cityName);
+                    result.put("country", country);
+                    result.put("lat", Double.parseDouble(
+                            item.get("lat").toString()));
+                    result.put("lon", Double.parseDouble(
+                            item.get("lon").toString()));
+                    results.add(result);
+                }
+            }
+
+            return results.subList(0, Math.min(5, results.size()));
+
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private String getEnglishCityName(Map<String, Object> address, Map<String, Object> item) {
+        // Check standard place fields first
+        String[] fields = {"city", "town", "village", "municipality", "county"};
+        for (String field : fields) {
+            if (address.containsKey(field)) {
+                return address.get(field).toString();
+            }
+        }
+        // For administrative boundaries (e.g. Tokyo Metropolis), the address has
+        // only "state" — fall back to the top-level "name" from Nominatim.
+        if (address.containsKey("state")) {
+            return address.get("state").toString();
+        }
+        if (item.containsKey("name")) {
+            return item.get("name").toString();
+        }
+        return "";
     }
 }
