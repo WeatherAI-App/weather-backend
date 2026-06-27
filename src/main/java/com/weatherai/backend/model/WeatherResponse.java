@@ -15,4 +15,5 @@ public class WeatherResponse {
     private String aiSuggestion;
     private double lat;
     private double lon;
+    private String timezone;
 }

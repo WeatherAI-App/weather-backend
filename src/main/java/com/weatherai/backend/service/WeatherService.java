@@ -49,6 +49,8 @@ public class WeatherService {
 
         Map<String, Object> raw = restTemplate.getForObject(url, Map.class);
 
+        String timezone = raw.get("timezone") != null ? raw.get("timezone").toString() : "UTC";
+
         // 3. Parse all sections
         CurrentWeather current = parseCurrentWeather(raw);
         List<HourlyForecast> hourly = parseHourlyForecast(raw);
@@ -61,7 +63,7 @@ public class WeatherService {
         // 5. AI suggestion
         String suggestion = aiService.getSuggestion(current);
 
-        return new WeatherResponse(location, current, hourly, daily, airQuality, suggestion, lat, lon);
+        return new WeatherResponse(location, current, hourly, daily, airQuality, suggestion, lat, lon, timezone);
     }
 
     // ── Current Weather ──────────────────────────────────────────
