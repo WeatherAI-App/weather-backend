@@ -1,5 +1,6 @@
 package com.weatherai.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
@@ -10,4 +11,6 @@ public class HourlyForecast {
     private int humidity;
     private double windSpeed;
     private String condition;
+    @JsonProperty("isDay")
+    private boolean isDay;
 }

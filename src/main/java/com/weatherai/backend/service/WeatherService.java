@@ -7,6 +7,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -49,7 +51,7 @@ public class WeatherService {
                         "&current=temperature_2m,relative_humidity_2m,apparent_temperature," +
                         "weather_code,wind_speed_10m,wind_direction_10m,visibility" +
                         "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability," +
-                        "weather_code,wind_speed_10m&forecast_hours=24" +
+                        "weather_code,wind_speed_10m,is_day&forecast_hours=48" +
                         "&daily=weather_code,temperature_2m_max,temperature_2m_min," +
                         "precipitation_probability_max,uv_index_max,sunrise,sunset" +
                         "&timezone=auto&forecast_days=7",
@@ -62,12 +64,12 @@ public class WeatherService {
 
         // 3. Parse all sections
         CurrentWeather current = parseCurrentWeather(raw);
-        List<HourlyForecast> hourly = parseHourlyForecast(raw);
+        List<HourlyForecast> hourly = parseHourlyForecast(raw, timezone);
         List<DailyForecast> daily = parseDailyForecast(raw);
         AirQuality airQuality = fetchAirQuality(lat, lon);
 
         // 4. Set best time outside
-        current.setBestTimeOutside(getBestTimeOutside(hourly));
+        current.setBestTimeOutside(getBestTimeOutside(hourly, timezone));
 
         // 5. AI suggestion
         String suggestion = aiService.getSuggestion(current);
@@ -106,7 +108,7 @@ public class WeatherService {
     }
 
     // ── Hourly Forecast ──────────────────────────────────────────
-    private List<HourlyForecast> parseHourlyForecast(Map<String, Object> raw) {
+    private List<HourlyForecast> parseHourlyForecast(Map<String, Object> raw, String timezone) {
         Map<String, Object> hourly = (Map<String, Object>) raw.get("hourly");
         List<HourlyForecast> result = new ArrayList<>();
 
@@ -116,30 +118,40 @@ public class WeatherService {
         List<Integer> rain = (List<Integer>) hourly.get("precipitation_probability");
         List<Double> wind = (List<Double>) hourly.get("wind_speed_10m");
         List<Integer> codes = (List<Integer>) hourly.get("weather_code");
+        List<Integer> isDayList = (List<Integer>) hourly.get("is_day");
 
-        // Get current hour to filter past hours
-        int currentHour = java.time.LocalTime.now().getHour();
+        // Match the current date+hour in the location's timezone against the
+        // timestamps in the data so we always return exactly 24 hours ahead,
+        // even if the current time is late in the day.
+        String currentDateHour;
+        try {
+            ZonedDateTime now = ZonedDateTime.now(ZoneId.of(timezone));
+            currentDateHour = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH"));
+        } catch (Exception e) {
+            currentDateHour = LocalTime.now().getHour() < 10
+                    ? "T0" + LocalTime.now().getHour()
+                    : "T" + LocalTime.now().getHour();
+        }
 
-        int count = 0;
-        for (int i = 0; i < times.size() && count < 24; i++) {
-            String timeStr = times.get(i);
-            // Extract hour from "2026-06-22T19:00"
-            int hour = Integer.parseInt(timeStr.substring(11, 13));
-
-            // Only include current hour onwards
-            if (i == 0 || hour >= currentHour || count > 0) {
-                if (count == 0 && hour < currentHour) continue;
-
-                HourlyForecast h = new HourlyForecast();
-                h.setTime(timeStr.substring(11, 16)); // "19:00"
-                h.setTemp(toDouble(temps.get(i)));
-                h.setHumidity(humidity.get(i));
-                h.setRainProbability(rain.get(i));
-                h.setWindSpeed(toDouble(wind.get(i)));
-                h.setCondition(getCondition(codes.get(i)));
-                result.add(h);
-                count++;
+        int startIndex = 0;
+        for (int i = 0; i < times.size(); i++) {
+            if (times.get(i).startsWith(currentDateHour)) {
+                startIndex = i;
+                break;
             }
+        }
+
+        for (int i = startIndex; i < times.size() && result.size() < 24; i++) {
+            String timeStr = times.get(i);
+            HourlyForecast h = new HourlyForecast();
+            h.setTime(timeStr.substring(11, 16)); // "19:00"
+            h.setTemp(toDouble(temps.get(i)));
+            h.setHumidity(humidity.get(i));
+            h.setRainProbability(rain.get(i));
+            h.setWindSpeed(toDouble(wind.get(i)));
+            h.setCondition(getCondition(codes.get(i)));
+            h.setDay(isDayList != null && isDayList.get(i) == 1);
+            result.add(h);
         }
 
         return result;
@@ -225,16 +237,12 @@ public class WeatherService {
     }
 
     // ── Best Time Outside ────────────────────────────────────────
-    private String getBestTimeOutside(List<HourlyForecast> hourly) {
-        // Get current hour
-        int currentHour = LocalTime.now().getHour();
-
+    private String getBestTimeOutside(List<HourlyForecast> hourly, String timezone) {
+        // hourly is already ordered from the current hour forward (next 24h),
+        // so every entry is in the future — just find the first comfortable slot.
         for (HourlyForecast h : hourly) {
-            // Parse hour from time string e.g. "18:00"
             int hour = Integer.parseInt(h.getTime().split(":")[0]);
-
-            // Only suggest daytime hours (6am - 6pm) and future hours
-            if (hour >= 6 && hour <= 18 && hour >= currentHour
+            if (hour >= 6 && hour <= 18
                     && h.getRainProbability() < 30
                     && h.getTemp() < 33) {
                 return "Around " + h.getTime();
